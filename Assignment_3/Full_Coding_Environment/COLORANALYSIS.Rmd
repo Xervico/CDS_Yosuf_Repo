@@ -1,0 +1,302 @@
+---
+title: "Color_Analysis"
+author: "yiqb"
+date: "2024-12-09"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "H:/UNIVERSITY/Semester_5/Cultural")
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(dplyr)
+library(ggplot2)
+library(dslabs)
+library(readr)
+```
+
+
+
+```{r}
+df <- read_csv("rgb_colored.csv")
+summary(df)
+```
+
+
+```{r}
+
+baseColour_freq <- table(df$baseColour)
+filtered_baseColours <- names(baseColour_freq[baseColour_freq >= 50])
+
+
+df <- df[df$baseColour %in% filtered_baseColours, ]
+
+filtered_baseColour_freq <- table(df$baseColour)
+print("Filtered Base Colour Frequencies:")
+print(filtered_baseColour_freq)
+```
+```{r}
+
+
+season_to_quarter <- function(season) {
+  if (is.na(season)) {
+    return(NA)  
+  }
+  if (season == "Winter") {
+    return(0)
+  } else if (season == "Spring") {
+    return(0.25)
+  } else if (season == "Summer") {
+    return(0.5)
+  } else if (season == "Fall") {
+    return(0.75)
+  } else {
+    return(NA)  # Handle any unexpected season values
+  }
+}
+
+
+df$years <- df$year + sapply(df$season, season_to_quarter)
+
+year_counts <- df %>%
+  group_by(years) %>%
+  summarise(count = n()) %>%
+  arrange(years)
+
+df <- df[df$years %in% year_counts$years, ]
+
+print("Filtered Years Distribution:")
+print(table(df$years))
+
+```
+
+
+
+```{r}
+
+color_data <- data.frame(
+  color = c("Beige", "Black", "Blue", "Brown", "Cream", "Green", "Grey", "Maroon", "Multi", 
+            "Navy Blue", "Off White", "Olive", "Orange", "Peach", "Pink", "Purple", "Red", 
+            "White", "Yellow"),
+  R = c(245, 0, 0, 139, 255, 0, 169, 128, 160, 0, 255, 128, 255, 255, 255, 128, 255, 255, 255),
+  G = c(245, 0, 0, 69, 253, 255, 169, 0, 174, 0, 255, 128, 165, 189, 192, 0, 0, 255, 255),
+  B = c(220, 0, 255, 19, 115, 0, 250, 0, 255, 0, 81, 0, 171, 70, 254, 128, 0, 0, 0)
+)
+
+df$RGB <- sapply(df$baseColour, function(base_colour) {
+  matching_row <- color_data[color_data$color == base_colour, ]
+  
+  if (nrow(matching_row) > 0) {
+    paste(matching_row$R, matching_row$G, matching_row$B, sep = ",")
+  } else {
+    NA
+  }
+})
+
+
+print(head(df))
+
+
+
+```
+
+
+```{r}
+
+gender_stats <- df %>%
+  group_by(gender) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  mutate(percentage = (count / sum(count)) * 100)
+
+print("Gender Ratio:")
+print(gender_stats)
+
+base_color_stats <- df %>%
+  group_by(baseColour) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  arrange(desc(count))
+
+print("Base Colour Distribution:")
+print(base_color_stats)
+```
+
+```{r}
+
+
+yearly_stats <- df %>%
+  group_by(years) %>%
+  summarise(count = n(), .groups = "drop")%>%
+  arrange(years)
+
+print("Yearly Distribution (Filtered):")
+print(yearly_stats)
+
+ggplot(gender_stats, aes(x = gender, y = count, fill = gender)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Gender Distribution",
+    x = "Gender",
+    y = "Count"
+  ) +
+  theme_minimal()
+
+ggplot(yearly_stats, aes(x = years, y = count)) +
+  geom_line(group = 1, color = "blue") +
+  geom_point(color = "red") +
+  labs(
+    title = "Yearly Distribution - TopWear (Filtered)",
+    x = "Year",
+    y = "Count"
+  ) +
+  theme_minimal()
+
+```
+```{r}
+# Compute Hasler and HS metrics
+df$color_Hasler_premade <- apply(df, 1, function(row) {
+  # Extract RGB values
+  r <- as.numeric(row["R"])
+  g <- as.numeric(row["G"])
+  b <- as.numeric(row["B"])
+
+  rg <- abs(r - g)
+  yb <- abs(0.5 * (r + g) - b)
+  
+
+  sqrt(rg^2 + yb^2) + 0.3 * mean(c(rg, yb))
+})
+
+df$color_HS_premade <- apply(df, 1, function(row) {
+
+  r <- as.numeric(row["R"])
+  g <- as.numeric(row["G"])
+  b <- as.numeric(row["B"])
+  
+  # Calculate rg, yb channels
+  rg <- abs(r - g)
+  yb <- abs(0.5 * (r + g) - b)
+  
+  # Compute HS's colorfulness
+  sqrt(mean(c(rg^2, yb^2)))
+})
+
+
+print(head(df))
+
+# write.csv(df, "filtered_with_colorfulness.csv", row.names = FALSE)
+```
+```{r}
+summary(df)
+
+```
+
+```{r}
+
+colorfulness_stats <- df %>%
+  group_by(gender) %>%
+  summarise(
+    avg_color_Hasler = mean(color_Hasler, na.rm = TRUE),
+    avg_color_HS = mean(color_HS, na.rm = TRUE)
+  )
+```
+
+
+```{r}
+ggplot(df,
+       aes(x=years,
+           y=color_Hasler)) +
+  geom_point()
+```
+
+```{r}
+m1 <- lm(color_Hasler~years, df)
+m2 <- lm(color_HS~years, df)
+
+summary(m1)
+summary(m2)
+```
+```{r}
+
+ggplot(df, aes(x = years, y = color_Hasler)) +
+  geom_point(color = "red", alpha = 0.5) +  # Scatter plot of points
+  geom_smooth(method = "lm", color = "orange", se = FALSE) +  # Linear regression line
+  labs(title = "Image RGB - Hasler", x = "Year", y = "Colorfulness") +
+  theme_minimal()
+
+ggplot(df, aes(x = years, y = color_HS)) +
+  geom_point(color = "blue", alpha = 0.5) +  # Scatter plot of points
+  geom_smooth(method = "lm", color = "orange", se = FALSE) +  # Linear regression line
+  labs(title = "Image RGB - SB", x = "Year", y = "Colorfulness") +
+  theme_minimal()
+
+
+```
+```{r}
+# Assuming you created a 'year_group' or similar categorization
+aov_result <- aov(color_Hasler ~ years, data = df)
+summary(aov_result)
+
+```
+```{r}
+cor.test(df$years, df$color_Hasler)
+cor.test(df$years, df$color_Hasler, method = "spearman")
+
+
+```
+
+```{r}
+m3 <- lm(color_Hasler_premade~years, df)
+m4 <- lm(color_HS_premade~years, df)
+
+summary(m3)
+summary(m4)
+```
+```{r}
+library(ggplot2)
+
+# Plotting for color_Hasler vs. year
+ggplot(df, aes(x = years, y = color_Hasler_premade)) +
+  geom_point(color = "green", alpha = 0.5) +  # Scatter plot of points
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  # Linear regression line
+  labs(title = "BaseColor RGB - Hasler", x = "Year", y = "Colorfulness") +
+  theme_minimal()
+
+# Plotting for color_HS vs. year
+ggplot(df, aes(x = years, y = color_HS_premade)) +
+  geom_point(color = "purple", alpha = 0.5) +  # Scatter plot of points
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  # Linear regression line
+  labs(title = "BaseColor RGB - SB", x = "Year", y = "Colorfulness") +
+  theme_minimal()
+```
+```{r}
+# Fit the linear model
+m5 <- lm(color_Hasler ~ years + gender, df)
+summary(m5)
+
+unique(df$gender)
+
+ggplot(df, aes(x = years, y = color_Hasler, color = gender)) +
+  geom_point(alpha = 0.5) +  # Scatter plot for all genders
+  geom_smooth(method = "lm", aes(group = gender), se = FALSE) +  # Separate regression lines for each gender
+  labs(title = "Color Hasler vs. Year by Gender", x = "Year", y = "Color Hasler") +
+  theme_minimal()
+
+```
+
+```{r}
+
+tshirt_df <- df[df$articleType == "Tshirts", ]
+
+ggplot(tshirt_df, aes(x = years, y = color_Hasler)) +
+  geom_point(color = "red", alpha = 0.5) +  # Scatter plot of points
+  geom_smooth(method = "lm", color = "orange", se = FALSE) +  # Linear regression line
+  labs(title = "Color Hasler vs. Year", x = "Year", y = "Color Hasler") +
+  theme_minimal()
+m5 <- lm(color_Hasler ~ years , tshirt_df)
+summary(m5)
+```
+
